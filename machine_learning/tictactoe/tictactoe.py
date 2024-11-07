@@ -25,7 +25,7 @@ Q = {}
 def get_state(board):
     return tuple(board.flatten())
 
-# Function to choose an action
+# Fonction pour choisir une action
 def choose_action(state):
     # Initialize Q-values for new state
     if state not in Q:
@@ -44,7 +44,7 @@ def choose_action(state):
         best_action = max(available_actions, key=lambda x: q_values[x])
         return best_action
 
-# Function to check for a win, loss, or draw
+# Fonction pour vérifier le gagnant, le match nul ou le jeu en cours
 def check_winner(board):
     win_states = [(0, 1, 2), (3, 4, 5), (6, 7, 8),
                   (0, 3, 6), (1, 4, 7), (2, 5, 8),
@@ -53,30 +53,30 @@ def check_winner(board):
         if board[x] == board[y] == board[z] != EMPTY:
             return board[x]
     if EMPTY not in board:
-        return 0  # Draw
-    return None  # Game ongoing
+        return 0  # Match null
+    return None
 
-# Reward function
+# Fonction de récompense
 def get_reward(result):
     if result == PLAYER_X:
-        return 100  # Win
+        return 100  # Victoire
     elif result == PLAYER_O:
-        return -100  # Loss
+        return -100  # Défaite
     elif result == 0:
         return 50  # Draw
     else:
         return -1  # Ongoing game
 
 def opponent_move(board):
-    # Check if the opponent can win
+    # Vérifie si l'opposant peut gagner
     for action in actions_space:
         if board[action] == EMPTY:
             board[action] = PLAYER_O
             if check_winner(board) == PLAYER_O:
                 return action
-            board[action] = EMPTY  # Undo the move
+            board[action] = EMPTY  # enlever le mouvement
 
-    # Check if the opponent needs to block the agent from winning
+    # Vérifie si l'oppant peut bloquer l'agent
     for action in actions_space:
         if board[action] == EMPTY:
             board[action] = PLAYER_X
@@ -85,22 +85,22 @@ def opponent_move(board):
                 return action
             board[action] = EMPTY  # Undo the move
 
-    # Choose the center if available
+    # Choisis le centre si disponible
     if board[4] == EMPTY:
         return 4
 
-    # Choose a corner if available
+    # Choisis un coin si disponible
     for action in [0, 2, 6, 8]:
         if board[action] == EMPTY:
             return action
 
-    # Otherwise, pick any random empty spot
+    # Sinon, choisisun endroit aléatoire
     return random.choice([a for a in actions_space if board[a] == EMPTY])
 
 
-# Training the agent
+# Entrainer l'agent
 for episode in range(num_episodes):
-    board = np.array([EMPTY] * 9)  # Reset board
+    board = np.array([EMPTY] * 9)  # Reset jeu
     state = get_state(board)
     done = False
     step = 0
@@ -120,7 +120,7 @@ for episode in range(num_episodes):
         if result is not None:
             done = True
         else:
-            # Opponent plays strategically
+            # Joueur joue 
             opponent_action = opponent_move(board)
             board[opponent_action] = PLAYER_O
             result = check_winner(board)
@@ -137,29 +137,29 @@ for episode in range(num_episodes):
 
 
     if (episode + 1) % 1000 == 0:
-        print(f"Episode {episode + 1}/{num_episodes} completed")
+        print(f"Episode {episode + 1}/{num_episodes} complété")
 
-print("Training completed")
+print("Entrainement terminé")
 
-# play the game with the trained agent
+# Fonction pour jouer un jeu avec l'IA entrainée
 def play_game():
     board = np.array([EMPTY] * 9)
     state = get_state(board)
     done = False
 
     while not done:
-        # Agent plays
+        # IA joue
         action = choose_action(state)
         board[action] = PLAYER_X
-        print(f"Agent plays: {action}")
+        print(f"IA joue: {action}")
         print(board.reshape(3, 3))
 
         result = check_winner(board)
         if result is not None:
             break
 
-        # Opponent plays
-        opponent_action = int(input("Enter opponent's action (0-8): "))
+        # Joueur joue
+        opponent_action = int(input("Entrez une action (0-8): "))
         board[opponent_action] = PLAYER_O
         print(board.reshape(3, 3))
 
@@ -170,10 +170,10 @@ def play_game():
         state = get_state(board)
 
     if result == PLAYER_X:
-        print("Agent wins!")
+        print("IA à gagné!")
     elif result == PLAYER_O:
-        print("Opponent wins!")
+        print("Joueur à gagné!")
     else:
-        print("It's a draw!")
+        print("Match nul")
 
 play_game()
