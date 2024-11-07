@@ -1,3 +1,5 @@
+from collections import defaultdict
+
 import numpy as np
 import random
 
@@ -16,7 +18,7 @@ gamma = 0.95  # Discount factor
 epsilon = 1.0  # Initial exploration rate
 epsilon_min = 0.01
 epsilon_decay = 0.995
-num_episodes = 10000
+num_episodes = 100000
 
 # Q-Table
 Q = {}
@@ -67,35 +69,26 @@ def get_reward(result):
     else:
         return -1  # Ongoing game
 
-def opponent_move(board):
-    # Vérifie si l'opposant peut gagner
-    for action in actions_space:
-        if board[action] == EMPTY:
-            board[action] = PLAYER_O
-            if check_winner(board) == PLAYER_O:
-                return action
-            board[action] = EMPTY  # enlever le mouvement
+# Initialize opponent Q-table with the same structure as the main agent's Q-table
+opponent_Q = defaultdict(lambda: np.zeros(len(actions_space)))
 
-    # Vérifie si l'oppant peut bloquer l'agent
-    for action in actions_space:
-        if board[action] == EMPTY:
-            board[action] = PLAYER_X
-            if check_winner(board) == PLAYER_X:
-                board[action] = PLAYER_O
-                return action
-            board[action] = EMPTY  # Undo the move
+# Opponent parameters
+opponent_epsilon = 0.1  # Probability for the opponent to explore
+opponent_alpha = 0.5    # Learning rate
+opponent_gamma = 0.9    # Discount factor
 
-    # Choisis le centre si disponible
-    if board[4] == EMPTY:
-        return 4
-
-    # Choisis un coin si disponible
-    for action in [0, 2, 6, 8]:
-        if board[action] == EMPTY:
-            return action
-
-    # Sinon, choisisun endroit aléatoire
-    return random.choice([a for a in actions_space if board[a] == EMPTY])
+def opponent_move_probabilistic(state, board):
+    # Choose an action for the opponent using ε-greedy policy
+    if np.random.rand() < opponent_epsilon:
+        # Random action (exploration)
+        action = random.choice([a for a in actions_space if board[a] == EMPTY])
+    else:
+        # Best action based on the opponent's Q-table (exploitation)
+        action_values = opponent_Q[state]
+        action = np.argmax(action_values)
+        if board[action] != EMPTY:  # Handle cases where best action is invalid
+            action = random.choice([a for a in actions_space if board[a] == EMPTY])
+    return action
 
 
 # Entrainer l'agent
@@ -105,6 +98,7 @@ for episode in range(num_episodes):
     done = False
     step = 0
 
+    # Use the probabilistic opponent in your main training loop
     while not done and step < 9:
         action = choose_action(state)
         board[action] = PLAYER_X
@@ -120,20 +114,22 @@ for episode in range(num_episodes):
         if result is not None:
             done = True
         else:
-            # Joueur joue 
-            opponent_action = opponent_move(board)
+            # Opponent plays using its Q-learning strategy
+            opponent_action = opponent_move_probabilistic(new_state, board)
             board[opponent_action] = PLAYER_O
             result = check_winner(board)
             reward = get_reward(result)
 
             if result is not None:
                 done = True
+            else:
+                # Update opponent Q-table based on outcome
+                opponent_Q[state][opponent_action] += opponent_alpha * (
+                        reward + opponent_gamma * np.max(opponent_Q[new_state]) - opponent_Q[state][opponent_action]
+                )
 
         state = new_state
         step += 1
-
-    if epsilon > epsilon_min:
-        epsilon *= epsilon_decay
 
 
     if (episode + 1) % 1000 == 0:
@@ -147,7 +143,10 @@ def play_game():
     state = get_state(board)
     done = False
 
+    Who_start = random.choice([PLAYER_X, PLAYER_O])
+
     while not done:
+
         # IA joue
         action = choose_action(state)
         board[action] = PLAYER_X
