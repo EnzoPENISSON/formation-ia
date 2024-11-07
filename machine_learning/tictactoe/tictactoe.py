@@ -62,6 +62,37 @@ def get_reward(result):
     else:
         return -1  # Ongoing game
 
+def opponent_move(board):
+    # Check if the opponent can win
+    for action in actions_space:
+        if board[action] == EMPTY:
+            board[action] = PLAYER_O
+            if check_winner(board) == PLAYER_O:
+                return action
+            board[action] = EMPTY  # Undo the move
+
+    # Check if the opponent needs to block the agent from winning
+    for action in actions_space:
+        if board[action] == EMPTY:
+            board[action] = PLAYER_X
+            if check_winner(board) == PLAYER_X:
+                board[action] = PLAYER_O
+                return action
+            board[action] = EMPTY  # Undo the move
+
+    # Choose the center if available
+    if board[4] == EMPTY:
+        return 4
+
+    # Choose a corner if available
+    for action in [0, 2, 6, 8]:
+        if board[action] == EMPTY:
+            return action
+
+    # Otherwise, pick any random empty spot
+    return random.choice([a for a in actions_space if board[a] == EMPTY])
+
+
 # Training the agent
 for episode in range(num_episodes):
     board = np.array([EMPTY] * 9)  # Reset board
@@ -71,27 +102,21 @@ for episode in range(num_episodes):
 
     while not done and step < 9:
         action = choose_action(state)
-
-        # Perform action
-        board[action] = PLAYER_X  # Agent plays X
+        board[action] = PLAYER_X
         new_state = get_state(board)
-
-        # Check game outcome
         result = check_winner(board)
         reward = get_reward(result)
 
         if new_state not in Q:
             Q[new_state] = np.zeros(len(actions_space))
 
-        # Update Q-Value
         Q[state][action] += alpha * (reward + gamma * np.max(Q[new_state]) - Q[state][action])
 
-        # If the game is won, lost, or drawn, finish the episode
         if result is not None:
             done = True
         else:
-            # Opponent plays randomly
-            opponent_action = random.choice([a for a in actions_space if board[a] == EMPTY])
+            # Opponent plays strategically
+            opponent_action = opponent_move(board)
             board[opponent_action] = PLAYER_O
             result = check_winner(board)
             reward = get_reward(result)
@@ -104,6 +129,7 @@ for episode in range(num_episodes):
 
     if epsilon > epsilon_min:
         epsilon *= epsilon_decay
+
 
     if (episode + 1) % 1000 == 0:
         print(f"Episode {episode + 1}/{num_episodes} completed")
