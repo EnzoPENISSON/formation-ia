@@ -49,3 +49,4 @@ print("Predictions:", predictions)
 print("Actual Ratings:", y_test.values)
 print("Mean Squared Error:", mse)
 print("R-squared (Accuracy):", r2)
+
