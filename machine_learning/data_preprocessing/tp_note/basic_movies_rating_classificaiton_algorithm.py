@@ -24,7 +24,7 @@ def preprocess_data(data):
 def predict_rating(data):
     # Preprocess data
     data = preprocess_data(data)
-    print(data.head(10))
+    #print(data.head(10))
     # Selecting features and target variable
     X = data[['RunTime', 'VOTES', 'GENRE_ENCODED']]
     y = data['RATING']
