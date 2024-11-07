@@ -33,14 +33,12 @@ def choose_action(state):
     if state not in Q:
         Q[state] = np.zeros(len(actions_space))
 
-    # Epsilon-greedy strategy Exploration
+    # Exploration
     if np.random.uniform(0, 1) < epsilon:
-        # Choose a random valid action
         available_actions = [a for a in actions_space if state[a] == EMPTY]
         return random.choice(available_actions)
     else:
         # Exploitation
-        # Choose the action with max Q-value for the current state
         q_values = Q[state]
         available_actions = [a for a in actions_space if state[a] == EMPTY]
         best_action = max(available_actions, key=lambda x: q_values[x])
@@ -61,45 +59,57 @@ def check_winner(board):
 # Fonction de récompense
 def get_reward(result):
     if result == PLAYER_X:
-        return 100  # Victoire
+        return 1  # Victoire
     elif result == PLAYER_O:
-        return -100  # Défaite
+        return -1  # Défaite
     elif result == 0:
-        return 50  # Draw
+        return 0  # Draw
     else:
         return -1  # Ongoing game
 
-# Initialize opponent Q-table with the same structure as the main agent's Q-table
-opponent_Q = defaultdict(lambda: np.zeros(len(actions_space)))
 
-# Opponent parameters
-opponent_epsilon = 0.1  # Probability for the opponent to explore
-opponent_alpha = 0.5    # Learning rate
-opponent_gamma = 0.9    # Discount factor
+def opponent_move_strategic(board):
+    """Définit un coup pour l'adversaire en tenant compte des stratégies de défense et d'attaque."""
+    # 1. Vérifier les possibilités de victoire de l'adversaire
+    for action in actions_space:
+        if board[action] == EMPTY:
+            board[action] = PLAYER_O
+            if check_winner(board) == PLAYER_O:
+                board[action] = EMPTY  # Annuler le coup avant de retourner
+                return action  # Coup gagnant pour l'adversaire
+            board[action] = EMPTY  # Annuler le coup
 
-def opponent_move_probabilistic(state, board):
-    # Choose an action for the opponent using ε-greedy policy
-    if np.random.rand() < opponent_epsilon:
-        # Random action (exploration)
-        action = random.choice([a for a in actions_space if board[a] == EMPTY])
-    else:
-        # Best action based on the opponent's Q-table (exploitation)
-        action_values = opponent_Q[state]
-        action = np.argmax(action_values)
-        if board[action] != EMPTY:  # Handle cases where best action is invalid
-            action = random.choice([a for a in actions_space if board[a] == EMPTY])
-    return action
+    # 2. Bloquer une possible victoire de l'agent
+    for action in actions_space:
+        if board[action] == EMPTY:
+            board[action] = PLAYER_X
+            if check_winner(board) == PLAYER_X:
+                board[action] = PLAYER_O  # Placer le coup bloquant
+                board[action] = EMPTY  # Annuler le coup après blocage
+                return action  # Bloque l'agent
+            board[action] = EMPTY  # Annuler le coup
 
+    # 3. Jouer au centre si disponible pour augmenter les chances de victoire future
+    if board[4] == EMPTY:
+        return 4
 
-# Entrainer l'agent
+    # 4. Jouer dans les coins si disponibles
+    for action in [0, 2, 6, 8]:
+        if board[action] == EMPTY:
+            return action
+
+    # 5. En dernier recours, jouer de manière aléatoire
+    return random.choice([a for a in actions_space if board[a] == EMPTY])
+
+# Intégrer cette stratégie dans la boucle de formation
 for episode in range(num_episodes):
-    board = np.array([EMPTY] * 9)  # Reset jeu
+    board = np.array([EMPTY] * 9)  # Réinitialiser le jeu
     state = get_state(board)
     done = False
     step = 0
 
-    # Use the probabilistic opponent in your main training loop
     while not done and step < 9:
+        # Agent joue son coup
         action = choose_action(state)
         board[action] = PLAYER_X
         new_state = get_state(board)
@@ -109,41 +119,36 @@ for episode in range(num_episodes):
         if new_state not in Q:
             Q[new_state] = np.zeros(len(actions_space))
 
+        # Mettre à jour la valeur Q
         Q[state][action] += alpha * (reward + gamma * np.max(Q[new_state]) - Q[state][action])
 
         if result is not None:
             done = True
         else:
-            # Opponent plays using its Q-learning strategy
-            opponent_action = opponent_move_probabilistic(new_state, board)
+            # L'adversaire joue de manière stratégique
+            opponent_action = opponent_move_strategic(board)
             board[opponent_action] = PLAYER_O
             result = check_winner(board)
             reward = get_reward(result)
 
             if result is not None:
                 done = True
-            else:
-                # Update opponent Q-table based on outcome
-                opponent_Q[state][opponent_action] += opponent_alpha * (
-                        reward + opponent_gamma * np.max(opponent_Q[new_state]) - opponent_Q[state][opponent_action]
-                )
 
         state = new_state
         step += 1
 
-
     if (episode + 1) % 1000 == 0:
         print(f"Episode {episode + 1}/{num_episodes} complété")
+
 
 print("Entrainement terminé")
 
 # Fonction pour jouer un jeu avec l'IA entrainée
 def play_game():
+    global result
     board = np.array([EMPTY] * 9)
     state = get_state(board)
     done = False
-
-    Who_start = random.choice([PLAYER_X, PLAYER_O])
 
     while not done:
 
