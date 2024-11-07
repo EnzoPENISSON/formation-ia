@@ -101,47 +101,53 @@ def opponent_move_strategic(board):
     # 5. En dernier recours, jouer de manière aléatoire
     return random.choice([a for a in actions_space if board[a] == EMPTY])
 
-# Intégrer cette stratégie dans la boucle de formation
-for episode in range(num_episodes):
-    board = np.array([EMPTY] * 9)  # Réinitialiser le jeu
-    state = get_state(board)
-    done = False
-    step = 0
+def trainning():
+    # Intégrer cette stratégie dans la boucle de formation
+    for episode in range(num_episodes):
+        board = np.array([EMPTY] * 9)  # Réinitialiser le jeu
+        state = get_state(board)
+        done = False
+        step = 0
 
-    while not done and step < 9:
-        # Agent joue son coup
-        action = choose_action(state)
-        board[action] = PLAYER_X
-        new_state = get_state(board)
-        result = check_winner(board)
-        reward = get_reward(result)
-
-        if new_state not in Q:
-            Q[new_state] = np.zeros(len(actions_space))
-
-        # Mettre à jour la valeur Q
-        Q[state][action] += alpha * (reward + gamma * np.max(Q[new_state]) - Q[state][action])
-
-        if result is not None:
-            done = True
-        else:
-            # L'adversaire joue de manière stratégique
-            opponent_action = opponent_move_strategic(board)
-            board[opponent_action] = PLAYER_O
+        while not done and step < 9:
+            # Agent joue son coup
+            action = choose_action(state)
+            board[action] = PLAYER_X
+            new_state = get_state(board)
             result = check_winner(board)
             reward = get_reward(result)
 
+            if new_state not in Q:
+                Q[new_state] = np.zeros(len(actions_space))
+
+            # Mettre à jour la valeur Q
+            Q[state][action] += alpha * (reward + gamma * np.max(Q[new_state]) - Q[state][action])
+
             if result is not None:
                 done = True
+            else:
+                # L'adversaire joue de manière stratégique
+                opponent_action = opponent_move_strategic(board)
+                board[opponent_action] = PLAYER_O
+                result = check_winner(board)
+                reward = get_reward(result)
 
-        state = new_state
-        step += 1
+                if result is not None:
+                    done = True
 
-    if (episode + 1) % 1000 == 0:
-        print(f"Episode {episode + 1}/{num_episodes} complété")
+            state = new_state
+            step += 1
 
+        if (episode + 1) % 1000 == 0:
+            print(f"Episode {episode + 1}/{num_episodes} complété")
 
-print("Entrainement terminé")
+    print("Entrainement terminé")
+
+    #Save the trained Q-table in a json file
+    import json
+    with open('Q_table.json', 'w') as f:
+        json.dump(Q, f)
+
 
 # Fonction pour jouer un jeu avec l'IA entrainée
 def play_game():
@@ -180,4 +186,5 @@ def play_game():
     else:
         print("Match nul")
 
-play_game()
+#play_game()
+trainning()
