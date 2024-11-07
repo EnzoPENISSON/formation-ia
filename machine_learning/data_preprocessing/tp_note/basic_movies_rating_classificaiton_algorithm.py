@@ -41,4 +41,4 @@ def classification_algorithm(csv_file_path):
 
 
 if __name__ == '__main__':
-    classification_algorithm('path_to_csv_file')
+    classification_algorithm('../../../data/release/movies_cleaned.csv')
