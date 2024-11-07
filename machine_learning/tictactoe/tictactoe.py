@@ -5,6 +5,7 @@ import random
 EMPTY = 0
 PLAYER_X = 1
 PLAYER_O = -1
+PLAYER_PRINT = {PLAYER_X: 'X', PLAYER_O: 'O', EMPTY: ' '}
 
 # Possible actions are the positions on the board (0 to 8 for a 3x3 board)
 actions_space = list(range(9))
@@ -26,13 +27,17 @@ def get_state(board):
 
 # Function to choose an action
 def choose_action(state):
+    # Initialize Q-values for new state
     if state not in Q:
-        Q[state] = np.zeros(len(actions_space))  # Initialize Q-values for new state
+        Q[state] = np.zeros(len(actions_space))
+
+    # Epsilon-greedy strategy Exploration
     if np.random.uniform(0, 1) < epsilon:
         # Choose a random valid action
         available_actions = [a for a in actions_space if state[a] == EMPTY]
         return random.choice(available_actions)
     else:
+        # Exploitation
         # Choose the action with max Q-value for the current state
         q_values = Q[state]
         available_actions = [a for a in actions_space if state[a] == EMPTY]
