@@ -1,4 +1,6 @@
-import numpy as np
+"""
+Fait par: Enzo PENISSON et Brieuc Courapié
+"""
 import random
 import json
 
@@ -218,7 +220,7 @@ def evaluate_accuracy(num_games):
 def play_game():
     """Fonction pour jouer une seule partie entre l'humain et l'IA."""
     board = [[EMPTY] * 3 for _ in range(3)]  # Commencer avec un plateau vide
-    current_player = PLAYER_X  # L'IA commence en premier
+    current_player = random.choice([PLAYER_X, PLAYER_O])  # Choisir aléatoirement qui commence
     game_over = False
     winner = None
 
@@ -307,11 +309,10 @@ def main():
             break
 
 Q = load_model()  # Charger le modèle de la Q-table
-
-#train_agent()
+#train_agent() # Ou entraîner un nouvel agent
 
 # Appeler la fonction pour évaluer les performances de l'IA
-evaluate_accuracy(10000)
+evaluate_accuracy(1000)
 
 # Démarrer le jeu
 main()
