@@ -1,7 +1,6 @@
-from collections import defaultdict
-
 import numpy as np
 import random
+import json
 
 # Board Representation
 EMPTY = 0
@@ -21,7 +20,16 @@ epsilon_decay = 0.995
 num_episodes = 100000
 
 # Q-Table
-Q = {}
+# Load the Q-table from a file if it exists
+try:
+    # Charger le fichier JSON
+    with open('Q_table.json', 'r') as f:
+        Q_serializable = json.load(f)
+
+    # Convertir les clés en tuples et les valeurs en numpy arrays (si nécessaire)
+    Q = {eval(key): np.array(value) for key, value in Q_serializable.items()}
+except FileNotFoundError:
+    Q = {}
 
 # Helper function to get the board as a tuple (hashable state)
 def get_state(board):
@@ -59,13 +67,11 @@ def check_winner(board):
 # Fonction de récompense
 def get_reward(result):
     if result == PLAYER_X:
-        return 1  # Victoire
+        return 100  # Victoire
     elif result == PLAYER_O:
-        return -1  # Défaite
-    elif result == 0:
-        return 0  # Draw
+        return -100  # Défaite
     else:
-        return -1  # Ongoing game
+        return 50  # Draw
 
 
 def opponent_move_strategic(board):
@@ -84,8 +90,7 @@ def opponent_move_strategic(board):
         if board[action] == EMPTY:
             board[action] = PLAYER_X
             if check_winner(board) == PLAYER_X:
-                board[action] = PLAYER_O  # Placer le coup bloquant
-                board[action] = EMPTY  # Annuler le coup après blocage
+                board[action] = PLAYER_O  # Placer le coup bloquant et le conserver
                 return action  # Bloque l'agent
             board[action] = EMPTY  # Annuler le coup
 
@@ -138,16 +143,23 @@ def trainning():
             state = new_state
             step += 1
 
-        if (episode + 1) % 1000 == 0:
+        if (episode + 1) % 10000 == 0:
             print(f"Episode {episode + 1}/{num_episodes} complété")
 
     print("Entrainement terminé")
 
-    #Save the trained Q-table in a json file
-    import json
-    with open('Q_table.json', 'w') as f:
-        json.dump(Q, f)
+    # Convertir les clés tuple de Q en chaînes pour la sauvegarde
+    Q_serializable = {str(key): value.tolist() for key, value in Q.items()}
 
+    # Sauvegarder dans un fichier JSON
+    with open('Q_table.json', 'w') as f:
+        json.dump(Q_serializable, f)
+
+def evaluate_IA():
+    global Q
+
+    print("Mean Squared Error (MSE):", mse)
+    print("Coefficient de détermination (R²):", r2)
 
 # Fonction pour jouer un jeu avec l'IA entrainée
 def play_game():
@@ -186,5 +198,5 @@ def play_game():
     else:
         print("Match nul")
 
-#play_game()
-trainning()
+play_game()
+#trainning()
