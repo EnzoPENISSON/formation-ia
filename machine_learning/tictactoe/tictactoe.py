@@ -2,201 +2,311 @@ import numpy as np
 import random
 import json
 
+# Flatten the board to make it easier for Q-learning
+flatten_board = lambda board: [item for row in board for item in row]
+
 # Board Representation
 EMPTY = 0
 PLAYER_X = 1
 PLAYER_O = -1
 PLAYER_PRINT = {PLAYER_X: 'X', PLAYER_O: 'O', EMPTY: ' '}
 
-# Possible actions are the positions on the board (0 to 8 for a 3x3 board)
-actions_space = list(range(9))
-
 # Q-Learning Parameters
-alpha = 0.8  # Learning rate
-gamma = 0.95  # Discount factor
+alpha = 0.8  # Slightly lower learning rate to reduce overfitting
+gamma = 0.85  # Focus a bit more on immediate rewards
 epsilon = 1.0  # Initial exploration rate
-epsilon_min = 0.01
-epsilon_decay = 0.995
-num_episodes = 100000
+epsilon_min = 0.1  # Prevent epsilon from decaying too much
+epsilon_decay = 0.995  # Slightly slower decay for more exploration
+num_episodes = 50000  # Increase episodes for more learning
+ratio = num_episodes // 10  # Print progress every 1% of episodes
 
-# Q-Table
-# Load the Q-table from a file if it exists
-try:
-    # Charger le fichier JSON
-    with open('Q_table.json', 'r') as f:
-        Q_serializable = json.load(f)
+# Q-Table (Initialize with zeros for all state-action pairs)
+Q = {}
 
-    # Convertir les clés en tuples et les valeurs en numpy arrays (si nécessaire)
-    Q = {eval(key): np.array(value) for key, value in Q_serializable.items()}
-except FileNotFoundError:
-    Q = {}
+# Define all possible actions (positions on the board)
+actions = [(i, j) for i in range(3) for j in range(3)]
 
-# Helper function to get the board as a tuple (hashable state)
-def get_state(board):
-    return tuple(board.flatten())
+def find_winning_move(state, player):
+    for action in actions:
+        i, j = action
+        if state[i][j] == EMPTY:
+            state[i][j] = player  # Simulate the move
+            if check_winner(state) == player:
+                return action  # Return the winning move
+            state[i][j] = EMPTY  # Undo the move if it doesn't result in a win
+    return None  # No winning move
 
-# Fonction pour choisir une action
+def encode_state(board):
+    """ Encode the state as a unique integer based on the board configuration. """
+    return sum((board[i][j] + 1) * (3 ** (3 * i + j)) for i in range(3) for j in range(3))
+
+def decode_state(encoded_state):
+    """ Decode the integer back to a board configuration. """
+    board = [[EMPTY] * 3 for _ in range(3)]
+    for i in range(3):
+        for j in range(3):
+            board[i][j] = (encoded_state // (3 ** (3 * i + j))) % 3 - 1
+    return board
+
+# Function to choose an action
 def choose_action(state):
-    # Initialize Q-values for new state
-    if state not in Q:
-        Q[state] = np.zeros(len(actions_space))
+    """ AI chooses an action based on Q-table and strategy."""
+    # Check if AI can win or block opponent from winning
+    offensive_move = find_winning_move(state, PLAYER_X)
+    defensive_move = find_winning_move(state, PLAYER_O)
 
-    # Exploration
-    if np.random.uniform(0, 1) < epsilon:
-        available_actions = [a for a in actions_space if state[a] == EMPTY]
-        return random.choice(available_actions)
-    else:
-        # Exploitation
-        q_values = Q[state]
-        available_actions = [a for a in actions_space if state[a] == EMPTY]
-        best_action = max(available_actions, key=lambda x: q_values[x])
-        return best_action
+    if offensive_move is not None:
+        return offensive_move  # AI wins if possible
+    elif defensive_move is not None:
+        return defensive_move  # AI blocks the opponent if needed
 
-# Fonction pour vérifier le gagnant, le match nul ou le jeu en cours
+    # Otherwise, choose randomly or based on Q-values
+    valid_actions = [(i, j) for i in range(3) for j in range(3) if state[i][j] == EMPTY]
+    if not valid_actions:
+        return None  # No valid actions left, game over
+
+    return random.choice(valid_actions)  # Choose randomly from valid moves
+
+# Function to check the winner
 def check_winner(board):
-    win_states = [(0, 1, 2), (3, 4, 5), (6, 7, 8),
-                  (0, 3, 6), (1, 4, 7), (2, 5, 8),
-                  (0, 4, 8), (2, 4, 6)]
+    """ Check if a player has won the game on the board. """
+    win_states = [(0, 1, 2), (3, 4, 5), (6, 7, 8), (0, 3, 6), (1, 4, 7), (2, 5, 8), (0, 4, 8), (2, 4, 6)]
+
+    # Flatten the board for easier checking of winning combinations
+    flat_board = flatten_board(board)
+
     for (x, y, z) in win_states:
-        if board[x] == board[y] == board[z] != EMPTY:
-            return board[x]
-    if EMPTY not in board:
-        return 0  # Match null
-    return None
+        if flat_board[x] == flat_board[y] == flat_board[z] != EMPTY:
+            return flat_board[x]  # Return the player (X or O) who has won
 
-# Fonction de récompense
-def get_reward(result):
+    # If no winner, check for draw
+    if EMPTY not in flat_board:
+        return 0  # Draw
+
+    return None  # Game still ongoing
+
+# Reward function
+def get_reward(state, result):
     if result == PLAYER_X:
-        return 100  # Victoire
+        return 100  # Win for AI
     elif result == PLAYER_O:
-        return -100  # Défaite
-    else:
-        return 50  # Draw
+        return -100  # Loss for AI
+    elif result == 0:
+        return 10  # Draw (good result for AI as it avoids a loss)
 
+    # Introduce small penalties for non-optimal moves
+    offensive_move = find_winning_move(state, PLAYER_X)
+    defensive_move = find_winning_move(state, PLAYER_O)
 
-def opponent_move_strategic(board):
-    """Définit un coup pour l'adversaire en tenant compte des stratégies de défense et d'attaque."""
-    # 1. Vérifier les possibilités de victoire de l'adversaire
-    for action in actions_space:
-        if board[action] == EMPTY:
-            board[action] = PLAYER_O
-            if check_winner(board) == PLAYER_O:
-                board[action] = EMPTY  # Annuler le coup avant de retourner
-                return action  # Coup gagnant pour l'adversaire
-            board[action] = EMPTY  # Annuler le coup
+    if offensive_move or defensive_move:
+        return 50  # AI is close to winning or blocking an opponent
+    return -10  # Default penalty for intermediate states
 
-    # 2. Bloquer une possible victoire de l'agent
-    for action in actions_space:
-        if board[action] == EMPTY:
-            board[action] = PLAYER_X
-            if check_winner(board) == PLAYER_X:
-                board[action] = PLAYER_O  # Placer le coup bloquant et le conserver
-                return action  # Bloque l'agent
-            board[action] = EMPTY  # Annuler le coup
+# Function to save the Q-table to a JSON file
+def save_model(Q, filename="q_table.json"):
+    # Convert state-action pairs to a serializable format
+    serializable_Q = {}
+    for state, actions in Q.items():
+        state_str = str(state)  # Convert the state tuple into a string to use as a key
+        serializable_Q[state_str] = actions
 
-    # 3. Jouer au centre si disponible pour augmenter les chances de victoire future
-    if board[4] == EMPTY:
-        return 4
+    # Write the Q-table to a JSON file
+    with open(filename, 'w') as f:
+        json.dump(serializable_Q, f, indent=4)
+    print(f"Model saved to {filename}")
 
-    # 4. Jouer dans les coins si disponibles
-    for action in [0, 2, 6, 8]:
-        if board[action] == EMPTY:
-            return action
-
-    # 5. En dernier recours, jouer de manière aléatoire
-    return random.choice([a for a in actions_space if board[a] == EMPTY])
-
-def trainning():
-    # Intégrer cette stratégie dans la boucle de formation
-    for episode in range(num_episodes):
-        board = np.array([EMPTY] * 9)  # Réinitialiser le jeu
-        state = get_state(board)
-        done = False
-        step = 0
-
-        while not done and step < 9:
-            # Agent joue son coup
-            action = choose_action(state)
-            board[action] = PLAYER_X
-            new_state = get_state(board)
-            result = check_winner(board)
-            reward = get_reward(result)
-
-            if new_state not in Q:
-                Q[new_state] = np.zeros(len(actions_space))
-
-            # Mettre à jour la valeur Q
-            Q[state][action] += alpha * (reward + gamma * np.max(Q[new_state]) - Q[state][action])
-
-            if result is not None:
-                done = True
-            else:
-                # L'adversaire joue de manière stratégique
-                opponent_action = opponent_move_strategic(board)
-                board[opponent_action] = PLAYER_O
-                result = check_winner(board)
-                reward = get_reward(result)
-
-                if result is not None:
-                    done = True
-
-            state = new_state
-            step += 1
-
-        if (episode + 1) % 10000 == 0:
-            print(f"Episode {episode + 1}/{num_episodes} complété")
-
-    print("Entrainement terminé")
-
-    # Convertir les clés tuple de Q en chaînes pour la sauvegarde
-    Q_serializable = {str(key): value.tolist() for key, value in Q.items()}
-
-    # Sauvegarder dans un fichier JSON
-    with open('Q_table.json', 'w') as f:
-        json.dump(Q_serializable, f)
-
-def evaluate_IA():
-    global Q
-
-    print("Mean Squared Error (MSE):", mse)
-    print("Coefficient de détermination (R²):", r2)
-
-# Fonction pour jouer un jeu avec l'IA entrainée
-def play_game():
-    global result
-    board = np.array([EMPTY] * 9)
-    state = get_state(board)
+# Training the agent
+for episode in range(num_episodes):
+    # Start with an empty board
+    state = [[EMPTY] * 3 for _ in range(3)]
+    step = 0
     done = False
-
     while not done:
-
-        # IA joue
         action = choose_action(state)
-        board[action] = PLAYER_X
-        print(f"IA joue: {action}")
-        print(board.reshape(3, 3))
+        # Update the board with the action (place the AI's move)
+        new_state = [row[:] for row in state]  # Copy the state
+        new_state[action[0]][action[1]] = PLAYER_X
 
-        result = check_winner(board)
-        if result is not None:
-            break
+        # Check if the game ended after the move
+        result = check_winner(new_state)
+        reward = get_reward(new_state, result)
 
-        # Joueur joue
-        opponent_action = int(input("Entrez une action (0-8): "))
-        board[opponent_action] = PLAYER_O
-        print(board.reshape(3, 3))
+        # Update the Q-table
+        Q[(encode_state(state), action)] = Q.get((encode_state(state), action), 0) + alpha * (reward + gamma * max([Q.get((encode_state(new_state), a), 0) for a in actions]) - Q.get((encode_state(state), action), 0))
 
-        result = check_winner(board)
-        if result is not None:
-            break
+        state = new_state
+        step += 1
 
-        state = get_state(board)
+        if reward != -10 or step > 9:
+            done = True
 
-    if result == PLAYER_X:
-        print("IA à gagné!")
-    elif result == PLAYER_O:
-        print("Joueur à gagné!")
+    # Decay epsilon
+    if epsilon > epsilon_min:
+        epsilon *= epsilon_decay
+
+    if (episode + 1) % ratio == 0:
+        print(f"Episode {episode + 1}/{num_episodes} completed")
+
+print("Training completed")
+
+# Function to simulate a game between the AI and a random opponent
+def simulate_game(ai_player, opponent=None):
+    board = [[EMPTY] * 3 for _ in range(3)]  # Start with an empty board
+    current_player = ai_player  # AI starts first
+    game_over = False
+    winner = None
+
+    while not game_over:
+        # Get the move for the current player
+        if current_player == ai_player:
+            action = choose_action(board)  # AI chooses its action
+            board[action[0]][action[1]] = PLAYER_X
+        else:
+            if opponent is not None:
+                action = opponent(board)
+                board[action[0]][action[1]] = PLAYER_O
+            else:
+                # Random opponent chooses a valid action
+                valid_actions = [(i, j) for i in range(3) for j in range(3) if board[i][j] == EMPTY]
+                action = random.choice(valid_actions)
+                board[action[0]][action[1]] = PLAYER_O
+
+        # Check for a winner
+        winner = check_winner(board)
+        if winner is not None or all(board[i][j] != EMPTY for i in range(3) for j in range(3)):
+            game_over = True
+
+        # Switch player
+        current_player = PLAYER_O if current_player == PLAYER_X else PLAYER_X
+
+    return winner
+
+# Evaluate the AI against a random opponent
+def evaluate_accuracy(num_games):
+    ai_wins = 0
+    ai_draws = 0
+    ai_losses = 0
+
+    for _ in range(num_games):
+        result = simulate_game(PLAYER_X)  # AI plays as X, opponent as O
+        if result == PLAYER_X:
+            ai_wins += 1
+        elif result == 0:
+            ai_draws += 1
+        else:
+            ai_losses += 1
+
+    accuracy = (ai_wins + ai_draws) / num_games
+    print(f"AI wins: {ai_wins}, AI draws: {ai_draws}, AI losses: {ai_losses}")
+    print(f"Accuracy: {accuracy}")
+
+# Call the function to evaluate the AI's performance
+evaluate_accuracy(10000)
+
+# Save the Q-table model
+save_model(Q)
+
+def play_game():
+    """Function to play a single game between the human and AI."""
+    board = [[EMPTY] * 3 for _ in range(3)]  # Start with an empty board
+    current_player = PLAYER_X  # AI starts first
+    game_over = False
+    winner = None
+
+    while not game_over:
+        print_board(board)
+
+        if current_player == PLAYER_O:
+            # Human player's turn (player O)
+            action = human_move(board)  # Ask the player to move
+            if action is None:
+                print("Invalid move. Try again.")
+                continue  # If the move is invalid, ask for a new one
+            board[action[0]][action[1]] = PLAYER_O
+        else:
+            # AI player's turn (player X)
+            print("AI is making its move...")
+            action = choose_action(board)  # AI chooses its action
+            if action is None:
+                print("AI has no valid move left!")  # This is for debugging purposes.
+                break
+            board[action[0]][action[1]] = PLAYER_X
+
+        # Check for a winner after each move
+        winner = check_winner(board)
+
+        # Game ends when there's a winner or the board is full
+        if winner is not None or all(board[i][j] != EMPTY for i in range(3) for j in range(3)):
+            game_over = True
+
+        # Switch player
+        current_player = PLAYER_O if current_player == PLAYER_X else PLAYER_X
+
+    # Final board display and result
+    print_board(board)
+    if winner == PLAYER_X:
+        print("AI (X) wins!")
+    elif winner == PLAYER_O:
+        print("You (O) win!")
     else:
-        print("Match nul")
+        print("It's a draw!")
 
-play_game()
-#trainning()
+    return winner
+
+def print_board(board):
+    """Prints the current board."""
+    for row in board:
+        print(" | ".join([PLAYER_PRINT[cell] for cell in row]))
+        print("---------")
+
+def human_move(board):
+    """Gets the human player's move."""
+    try:
+        move = int(input("Enter your move (0-8): "))  # Get input from user (0-8)
+        if move < 0 or move > 8:
+            print("Invalid move! Choose a number between 0 and 8.")
+            return None
+        row, col = divmod(move, 3)  # Convert move to row, col
+        if board[row][col] != EMPTY:
+            print("That space is already taken! Try again.")
+            return None
+        return (row, col)
+    except ValueError:
+        print("Invalid input! Please enter a number.")
+        return None
+
+def find_winning_move(state, player):
+    """Find if there's a winning move for a player"""
+    for action in actions:
+        i, j = action
+        if state[i][j] == EMPTY:
+            state[i][j] = player  # Simulate the move
+            if check_winner(state) == player:
+                return action  # Return the winning move
+            state[i][j] = EMPTY  # Undo the move if it doesn't result in a win
+    return None  # No winning move
+
+def play_again():
+    """ Ask the player if they want to play another game. """
+    while True:
+        choice = input("Do you want to play again? (y/n): ").lower()
+        if choice == 'y':
+            return True
+        elif choice == 'n':
+            return False
+        else:
+            print("Invalid input! Please enter 'y' for yes or 'n' for no.")
+
+def main():
+    """ Main function to start the game and handle replay logic. """
+    print("Welcome to Tic-Tac-Toe! You are playing as O and the AI is playing as X.")
+
+    # Loop for multiple games
+    while True:
+        play_game()  # Play a single game
+        if not play_again():
+            print("Thank you for playing! Goodbye!")
+            break
+
+# Start the game
+main()
