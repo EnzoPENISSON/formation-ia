@@ -12,13 +12,13 @@ PLAYER_O = -1
 PLAYER_PRINT = {PLAYER_X: 'X', PLAYER_O: 'O', EMPTY: ' '}
 
 # Q-Learning Parameters
-alpha = 0.8  # Slightly lower learning rate to reduce overfitting
+alpha = 0.75 # Slightly lower learning rate to reduce overfitting
 gamma = 0.85  # Focus a bit more on immediate rewards
 epsilon = 1.0  # Initial exploration rate
 epsilon_min = 0.1  # Prevent epsilon from decaying too much
 epsilon_decay = 0.995  # Slightly slower decay for more exploration
-num_episodes = 50000  # Increase episodes for more learning
-ratio = num_episodes // 10  # Print progress every 1% of episodes
+num_episodes = 100000  # Increase episodes for more learning
+ratio = num_episodes // 100  # Print progress every 1% of episodes
 
 # Q-Table (Initialize with zeros for all state-action pairs)
 Q = {}
@@ -27,6 +27,7 @@ Q = {}
 actions = [(i, j) for i in range(3) for j in range(3)]
 
 def find_winning_move(state, player):
+    """Find if there's a winning move for a player"""
     for action in actions:
         i, j = action
         if state[i][j] == EMPTY:
@@ -34,7 +35,7 @@ def find_winning_move(state, player):
             if check_winner(state) == player:
                 return action  # Return the winning move
             state[i][j] = EMPTY  # Undo the move if it doesn't result in a win
-    return None  # No winning move
+    return None  # No winning move found
 
 def encode_state(board):
     """ Encode the state as a unique integer based on the board configuration. """
@@ -116,38 +117,52 @@ def save_model(Q, filename="q_table.json"):
     print(f"Model saved to {filename}")
 
 # Training the agent
-for episode in range(num_episodes):
-    # Start with an empty board
-    state = [[EMPTY] * 3 for _ in range(3)]
-    step = 0
-    done = False
-    while not done:
-        action = choose_action(state)
-        # Update the board with the action (place the AI's move)
-        new_state = [row[:] for row in state]  # Copy the state
-        new_state[action[0]][action[1]] = PLAYER_X
+def train_agent():
+    global Q, epsilon
+    for episode in range(num_episodes):
+        # Start with an empty board
+        state = [[EMPTY] * 3 for _ in range(3)]
+        step = 0
+        done = False
+        while not done:
+            action = choose_action(state)
+            # Update the board with the action (place the AI's move)
+            new_state = [row[:] for row in state]  # Copy the state
+            new_state[action[0]][action[1]] = PLAYER_X
 
-        # Check if the game ended after the move
-        result = check_winner(new_state)
-        reward = get_reward(new_state, result)
+            # Check if the game ended after the move
+            result = check_winner(new_state)
+            reward = get_reward(new_state, result)
 
-        # Update the Q-table
-        Q[(encode_state(state), action)] = Q.get((encode_state(state), action), 0) + alpha * (reward + gamma * max([Q.get((encode_state(new_state), a), 0) for a in actions]) - Q.get((encode_state(state), action), 0))
+            # Update the Q-table
+            Q[(encode_state(state), action)] = Q.get((encode_state(state), action), 0) + alpha * (reward + gamma * max([Q.get((encode_state(new_state), a), 0) for a in actions]) - Q.get((encode_state(state), action), 0))
 
-        state = new_state
-        step += 1
+            state = new_state
+            step += 1
 
-        if reward != -10 or step > 9:
-            done = True
+            if reward != -10 or step > 9:
+                done = True
 
-    # Decay epsilon
-    if epsilon > epsilon_min:
-        epsilon *= epsilon_decay
+        # Decay epsilon
+        if epsilon > epsilon_min:
+            epsilon *= epsilon_decay
 
-    if (episode + 1) % ratio == 0:
-        print(f"Episode {episode + 1}/{num_episodes} completed")
+        if (episode + 1) % ratio == 0:
+            print(f"Episode {episode + 1}/{num_episodes} completed")
 
-print("Training completed")
+    print("Training completed")
+    # Save the Q-table model
+    save_model(Q)
+
+def load_model(filename="q_table.json"):
+    try:
+        with open(filename, 'r') as f:
+            Q = json.load(f)
+        print(f"Model loaded from {filename}")
+        return Q
+    except FileNotFoundError:
+        train_agent()  # Train a new agent if the model is not found
+        return Q
 
 # Function to simulate a game between the AI and a random opponent
 def simulate_game(ai_player, opponent=None):
@@ -199,12 +214,6 @@ def evaluate_accuracy(num_games):
     accuracy = (ai_wins + ai_draws) / num_games
     print(f"AI wins: {ai_wins}, AI draws: {ai_draws}, AI losses: {ai_losses}")
     print(f"Accuracy: {accuracy}")
-
-# Call the function to evaluate the AI's performance
-evaluate_accuracy(10000)
-
-# Save the Q-table model
-save_model(Q)
 
 def play_game():
     """Function to play a single game between the human and AI."""
@@ -275,16 +284,7 @@ def human_move(board):
         print("Invalid input! Please enter a number.")
         return None
 
-def find_winning_move(state, player):
-    """Find if there's a winning move for a player"""
-    for action in actions:
-        i, j = action
-        if state[i][j] == EMPTY:
-            state[i][j] = player  # Simulate the move
-            if check_winner(state) == player:
-                return action  # Return the winning move
-            state[i][j] = EMPTY  # Undo the move if it doesn't result in a win
-    return None  # No winning move
+
 
 def play_again():
     """ Ask the player if they want to play another game. """
@@ -307,6 +307,15 @@ def main():
         if not play_again():
             print("Thank you for playing! Goodbye!")
             break
+
+
+Q = load_model()  # Load the Q-table model
+
+#train_agent()
+
+# Call the function to evaluate the AI's performance
+evaluate_accuracy(10000)
+
 
 # Start the game
 main()
